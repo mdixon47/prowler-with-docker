@@ -8,7 +8,7 @@ Run the offline half locally before pushing:
 make ci
 ```
 
-> **This project is not a git repository yet.** The workflows are in place but nothing runs until you `git init`, commit, and push to GitHub. See [Turning it on](#turning-it-on).
+Published at **[mdixon47/prowler-with-docker](https://github.com/mdixon47/prowler-with-docker)** (public). CI runs on every push and pull request.
 
 ---
 
@@ -26,7 +26,7 @@ Five jobs, run in parallel.
 
 Three of these deserve explanation.
 
-**The documentation job enforces the project convention** that all markdown lives in `docs/` except `Claude.md`. It also resolves every relative link and heading anchor — 47 of them at the time of writing, all hand-written and therefore all suspect. It found a genuinely broken anchor the first time it ran: a `⚠️` in a heading, where GitHub keeps the invisible variation-selector codepoint in the slug. The fix was to keep emoji out of headings rather than teach the checker that quirk.
+**The documentation job enforces the project convention** that all markdown lives in `docs/` except `Claude.md`. It also resolves every relative link and heading anchor — 62 of them at the time of writing, all hand-written and therefore all suspect. It found a genuinely broken anchor the first time it ran: a `⚠️` in a heading, where GitHub keeps the invisible variation-selector codepoint in the slug. The fix was to keep emoji out of headings rather than teach the checker that quirk.
 
 **The compose job is a real integration test, not a lint.** `docker-compose.yml` and `.env` are gitignored, so CI fetches them exactly as a user does, by running `scripts/setup.sh`. That means CI fails if the pinned tag's files are moved, renamed or withdrawn upstream — which is the failure a user would otherwise hit on their first `make setup`.
 
@@ -73,10 +73,12 @@ OIDC token exchange is done with `curl` and `aws sts assume-role-with-web-identi
 Third-party actions are pinned to **commit SHAs**, not tags:
 
 ```yaml
-uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 ```
 
-Tags are mutable. A compromised action repository could repoint `v4` at anything, and every workflow using it would pick that up on the next run. The SHA can't be repointed. The trailing comment records which tag it corresponded to, and Dependabot understands that convention well enough to update both.
+Tags are mutable. A compromised action repository could repoint a version tag at anything, and every workflow using it would pick that up on the next run. The SHA can't be repointed. The trailing comment records which release it corresponds to, and Dependabot rewrites the SHA and the comment together.
+
+All three actions run on **Node 24**. GitHub is retiring the Node 20 runtime, and the previous pins (`checkout` v4, `setup-python` v5, `setup-terraform` v3) all triggered the deprecation annotation on every job that used them.
 
 Only three actions are used — `actions/checkout`, `actions/setup-python`, `hashicorp/setup-terraform`. Everything else is `curl`, `jq`, `gh`, `shellcheck` and `docker compose`, all preinstalled on `ubuntu-latest`.
 
@@ -88,23 +90,22 @@ Weekly PRs for GitHub Actions SHAs and the Terraform AWS provider constraint.
 
 Three things it deliberately does **not** cover, with the reasons in the file itself: the pinned Prowler release and vendored policy (handled by `upstream-release.yml`, which bumps them together), the container images in `docker-compose.yml` (fetched at setup time and gitignored — there's nothing tracked to update), and the checkov version in `ci.yml` (an env var, not a manifest Dependabot can parse).
 
-## Turning it on
+## Before you commit
 
-```bash
-git init
-git add .
-git commit -m "Initial commit: Prowler local server with Docker Compose"
-gh repo create prowler-with-docker --private --source=. --push
-```
-
-Before that first commit, confirm nothing sensitive is staged. `.env`, `_data/`, `*.tfstate*`, `terraform.tfvars` and `*.bak` are all gitignored, but the check is cheap:
+The repo is already published, but this check is worth repeating whenever you add files — especially since the repo is **public**.
 
 ```bash
 git status --short
 git check-ignore -v .env terraform/terraform.tfstate terraform/terraform.tfvars
 ```
 
-If `.env` shows up in `git status`, stop and fix `.gitignore` before committing — it holds the key that encrypts your stored AWS credentials.
+`.env`, `_data/`, `*.tfstate*`, `terraform.tfvars` and `*.bak` are all gitignored. If any of them shows up in `git status`, stop and fix `.gitignore` before committing — `.env` holds the key that encrypts your stored AWS credentials, and `*.tfstate` holds the access key secret itself ([TF-1](issue.md#tf-1--access-key-secret-is-stored-in-terraform-state-in-plaintext--open)).
+
+Scanning staged content, not just filenames, catches the case where a secret was pasted into a tracked file:
+
+```bash
+git diff --cached | grep -nE 'AKIA[0-9A-Z]{16}|BEGIN [A-Z ]*PRIVATE KEY'
+```
 
 ## Local equivalents
 
