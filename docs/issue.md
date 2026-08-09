@@ -158,6 +158,14 @@ The pin controls which `docker-compose.yml`/`.env` are fetched, but those files 
 
 *Workaround:* the re-fetch command in [terraform.md](terraform.md#what-gets-created). Automating it inside `setup.sh` would mean the script mutating Terraform-managed files, which is worse — so this stays a documented manual step.
 
+### TF-5 — Saved plan files were not gitignored · **fixed**
+
+`.gitignore` had `*.tfplan`, which does not match a file named plain `tfplan` — and `-out=tfplan` is the common habit. After the first real apply, `terraform/tfplan` showed up as untracked in a **public** repo, one `git add -A` away from being committed.
+
+*Checked:* this particular plan did **not** contain the access key secret, because the key was `(known after apply)`. But plan files can embed sensitive variable values and the full prior state, so they should never be tracked regardless.
+
+*Fixed:* `.gitignore` now carries both `tfplan` and `*.tfplan`; the stale file was removed and the rule verified with `git check-ignore`.
+
 ### TF-3 — `terraform destroy` fails if the user was modified out of band · **accepted (deliberate)**
 
 `force_destroy = false` on the IAM user means destroy fails if someone attached extra policies or a second access key through the console.

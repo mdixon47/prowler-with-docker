@@ -138,5 +138,10 @@ Step 1 alone is enough to revoke access. Steps 2 and 3 are about not leaving cop
 | `role` mode plan (valid principal) | 5 to add, `sts:ExternalId` condition rendered correctly |
 | `role` mode with empty `trusted_principal_arns` | Precondition fires at plan time with the intended message |
 | Both AWS-managed policy ARNs resolve | Yes, including the `job-function/` path |
+| `terraform apply` (credentials mode) | 6 added, 0 changed, 0 destroyed |
+| Created user matches intent | Path `/security/`, 3 policies attached, 1 active key, **no** login profile |
+| New key authenticates | `sts:GetCallerIdentity` returns the `prowler-scan` ARN |
+| New key can read | `s3api list-buckets` succeeds |
+| New key **cannot** write | `iam:CreateUser` returns `AccessDenied` — as it must |
 
-**Still not verified:** `terraform apply`. Nothing here has been created in AWS. Run `make tf-plan` and read it before `make tf-apply`.
+Everything in this configuration has now been exercised against a live account.

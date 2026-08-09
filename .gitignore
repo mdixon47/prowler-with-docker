@@ -26,6 +26,9 @@ credentials
 terraform/.terraform/
 *.tfstate
 *.tfstate.*
+# Saved plans: both `-out=tfplan` (no extension, the common habit) and *.tfplan.
+# A plan file can embed sensitive variable values and the full prior state.
+tfplan
 *.tfplan
 crash.log
 crash.*.log
