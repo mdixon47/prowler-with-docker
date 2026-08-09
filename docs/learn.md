@@ -104,6 +104,141 @@ Two mitigations, in increasing order of maturity:
 
 Starting with keys is a reasonable learning shortcut precisely because the cleanup is easy and complete: delete the key, and the access is gone regardless of what leaked.
 
+## Creating `prowler-scan`, step by step
+
+Two ways to create the identity. Both produce the same thing; pick one.
+
+> Throughout, `<ACCOUNT_ID>` means your own 12-digit AWS account ID. Get it with
+> `aws sts get-caller-identity --query Account --output text`. Don't paste it into
+> anything you publish — it isn't a secret, but it's useful to someone enumerating
+> your account, so this repo keeps it out of tracked files.
+
+### Before you start: confirm you can create IAM identities
+
+```bash
+aws sts get-caller-identity
+```
+
+The `Arn` should be an identity you recognize as having admin or IAM-write rights. Confirm nothing blocks the specific calls:
+
+```bash
+aws iam simulate-principal-policy \
+  --policy-source-arn "$(aws sts get-caller-identity --query Arn --output text)" \
+  --action-names iam:CreateUser iam:CreateAccessKey iam:CreatePolicy \
+                 iam:AttachUserPolicy iam:CreateRole iam:DeleteUser \
+  --query 'EvaluationResults[].[EvalActionName,EvalDecision]' --output text
+```
+
+Every row should say `allowed`. This catches a Service Control Policy or permissions boundary that `AdministratorAccess` alone doesn't reveal — the kind of thing that otherwise surfaces halfway through an apply.
+
+Then check the names are free, so you don't collide with an earlier attempt:
+
+```bash
+aws iam get-user --user-name prowler-scan          # expect NoSuchEntity
+```
+
+---
+
+### Path A — Terraform (recommended)
+
+Six resources, one command, and a single command to remove them again. Full detail in [terraform.md](terraform.md).
+
+**1. Configure it.**
+
+```bash
+cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+```
+
+The defaults create an IAM user with an access key, which matches the walkthrough. Leave them alone for a first run.
+
+**2. Read the plan before it touches anything.**
+
+```bash
+make tf-plan
+```
+
+Expect `Plan: 6 to add, 0 to change, 0 to destroy`:
+
+| Resource | What it is |
+| --- | --- |
+| `aws_iam_user.prowler` | `prowler-scan`, path `/security/`, no console access |
+| `aws_iam_access_key.prowler` | The key pair you paste into Prowler |
+| `aws_iam_policy.additions` | `prowler-scan-additions` |
+| `aws_iam_user_policy_attachment` ×3 | `SecurityAudit`, `ViewOnlyAccess`, additions |
+
+If it says anything other than "6 to add", stop and read why. A `destroy` or `change` line means Terraform found existing state you didn't expect.
+
+**3. Create it.**
+
+```bash
+make tf-apply
+```
+
+**4. Read the credentials out.**
+
+```bash
+make tf-creds        # account ID and access key ID
+make -s tf-secret    # the secret, on its own line
+```
+
+The secret is now also in `terraform/terraform.tfstate` **in plaintext**. That file is gitignored, but treat it as a credential — see [the state file warning](terraform.md#the-state-file-holds-your-secret). To avoid it entirely, set `create_access_key = false` and make the key in the console, or use role assumption.
+
+**5. Remove it when you're done.**
+
+```bash
+make tf-destroy
+```
+
+---
+
+### Path B — AWS Console (manual)
+
+Slower, but you see every screen, and doing it once makes the Terraform legible. Full detail with screenshots-worth of specifics in [aws-iam-setup.md](aws-iam-setup.md).
+
+1. **IAM → Users → Create user.** Name it `prowler-scan`. Do **not** enable console access — this identity only ever uses API keys.
+2. **Attach policies directly**, and attach both:
+   - `SecurityAudit`
+   - `ViewOnlyAccess` — under **Job function**, which is a separate list from the main one and the usual place people get stuck
+3. **Create the user.**
+4. *(Optional)* Create a customer-managed policy from [`prowler-additions-policy.json`](../terraform/policies/prowler-additions-policy.json) and attach it too. Without it a handful of checks report as errors rather than pass/fail — a coverage gap, not a security gap.
+5. **Open the user → Security credentials → Create access key.** Choose **Third-party service**, acknowledge the notice, create.
+6. **Copy both values.** The secret is shown exactly once. Lose it and you delete the key and make another.
+
+### Verify the identity works — before opening Prowler
+
+Worth doing either way. A bad paste here surfaces as a confusing "Check connection" failure later.
+
+```bash
+AWS_ACCESS_KEY_ID=AKIA... \
+AWS_SECRET_ACCESS_KEY=... \
+aws sts get-caller-identity
+```
+
+Two things to confirm in the output:
+
+- `Arn` ends in `user/prowler-scan` — you're testing the scanner, not your admin identity
+- `Account` matches the account you intend to scan
+
+Then prove it is genuinely read-only. This **should fail**:
+
+```bash
+AWS_ACCESS_KEY_ID=AKIA... \
+AWS_SECRET_ACCESS_KEY=... \
+aws iam create-user --user-name should-not-work
+```
+
+An `AccessDenied` is the correct result. If that succeeds, something broader than `SecurityAudit` + `ViewOnlyAccess` is attached and you should look at why before pointing a scanner at the account.
+
+### Then connect it
+
+In the Prowler UI at <http://localhost:3000>: **Settings → Providers → Add Provider → Amazon Web Services**, enter `<ACCOUNT_ID>`, choose **Credentials**, paste the key ID and secret, leave the session token blank. Full walkthrough in [README.md](README.md#step-4--connect-aws-in-the-ui).
+
+### Cleanup, in order
+
+1. `make tf-destroy` — or delete the key and user in the console. This alone revokes access.
+2. `make purge` — removes Prowler's stored, now-dead encrypted copy of the key.
+3. Delete `terraform/terraform.tfstate*` if you used Path A with a generated key.
+
 ## Glossary
 
 | Term | Meaning |
