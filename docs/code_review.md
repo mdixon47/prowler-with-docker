@@ -119,7 +119,7 @@ The first cut guarded role-mode inputs with a `terraform_data` resource carrying
 
 *Fix:* moved the guard onto `aws_iam_role` itself, where it references `var.trusted_principal_arns`. Better placement anyway — it now fires only in the mode where it applies, and keeps `required_version` at 1.5 rather than needing 1.9 for cross-variable validation.
 
-*Worth noting the failure mode it prevents:* I confirmed in an isolated harness that `aws_iam_policy_document` accepts an empty `identifiers` list and renders `"Principal": {"AWS": []}` without complaint. AWS then rejects it at apply with `MalformedPolicyDocument`. Without the guard, an easy mistake produces an error that names neither the variable nor the cause. Tracked as [TF-4](issue.md#tf-4--role-mode-precondition-unverified-against-a-live-account--open).
+*Worth noting the failure mode it prevents:* I confirmed in an isolated harness that `aws_iam_policy_document` accepts an empty `identifiers` list and renders `"Principal": {"AWS": []}` without complaint. AWS then rejects it at apply with `MalformedPolicyDocument`. Without the guard, an easy mistake produces an error that names neither the variable nor the cause. Tracked as [TF-4](issue.md#tf-4--role-mode-precondition-verified-against-a-live-account--fixed), since confirmed to fire at plan time against a live account.
 
 ### 10. Terraform: guidance output leaked sensitivity — **fixed**
 

@@ -162,11 +162,13 @@ The pin controls which `docker-compose.yml`/`.env` are fetched, but those files 
 
 *Rationale:* the alternative silently discards access paths Terraform didn't create. A failed destroy that makes you look is the safer default. Override by removing the extra attachments yourself, not by flipping the flag.
 
-### TF-4 — Role-mode precondition unverified against a live account · **open**
+### TF-4 — Role-mode precondition verified against a live account · **fixed**
 
-Role mode with an empty `trusted_principal_arns` is guarded by a `lifecycle.precondition` on `aws_iam_role`. It is expected to fire at plan time, but this could not be observed end to end — provider credential validation fails first without real AWS credentials.
+Role mode with an empty `trusted_principal_arns` is guarded by a `lifecycle.precondition` on `aws_iam_role`.
 
-*Confirmed separately:* without the guard, the trust policy renders as `"Principal": {"AWS": []}`, which AWS rejects at apply with `MalformedPolicyDocument`. So the failure mode is real; only the guard's timing is unverified.
+*Verified* against account `907992937591`: the precondition fires at **plan** time, before any API call, and prints the intended message naming the variable. Role mode with a valid principal plans cleanly (5 to add) and renders the `sts:ExternalId` condition correctly. Credentials mode plans 6 to add.
+
+*Confirmed separately:* without the guard, the trust policy renders as `"Principal": {"AWS": []}`, which AWS rejects at apply with `MalformedPolicyDocument`.
 
 ---
 
@@ -196,7 +198,7 @@ It's excluded because BSD `df -g` would silently skip the disk check on Linux, m
 
 ### CI-4 — Terraform plan coverage is opt-in and unset · **open**
 
-`terraform-plan.yml` no-ops until `AWS_PLAN_ROLE_ARN` is set, so out of the box nothing ever runs `terraform plan` against a real account. That leaves [TF-4](#tf-4--role-mode-precondition-unverified-against-a-live-account--open) unverified in CI as well as locally.
+`terraform-plan.yml` no-ops until `AWS_PLAN_ROLE_ARN` is set, so out of the box nothing ever runs `terraform plan` against a real account. That leaves [TF-4](#tf-4--role-mode-precondition-verified-against-a-live-account--fixed) unexercised in CI, though it has since been verified by hand.
 
 *Mitigation:* offline `validate` and `console` checks still run on every PR. Setting up OIDC closes the gap — see [ci.md](ci.md#terraform-planyml--opt-in-prs-touching-terraform).
 

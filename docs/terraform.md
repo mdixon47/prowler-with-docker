@@ -130,6 +130,13 @@ Step 1 alone is enough to revoke access. Steps 2 and 3 are about not leaving cop
 
 ## Verification status
 
-`terraform fmt`, `terraform init` and `terraform validate` all pass, and the empty-principals behavior above was confirmed in an isolated harness.
+`terraform fmt`, `terraform init` and `terraform validate` pass. Both modes have been planned against a live account:
 
-**Not verified:** `plan` and `apply` against a real account, which need AWS credentials I don't have. The precondition is expected to fire at plan time but I could not observe it end to end — provider credential validation fails first. Run `make tf-plan` and read it before `make tf-apply`.
+| Check | Result |
+| --- | --- |
+| `credentials` mode plan | 6 to add — user, access key, additions policy, 3 attachments |
+| `role` mode plan (valid principal) | 5 to add, `sts:ExternalId` condition rendered correctly |
+| `role` mode with empty `trusted_principal_arns` | Precondition fires at plan time with the intended message |
+| Both AWS-managed policy ARNs resolve | Yes, including the `job-function/` path |
+
+**Still not verified:** `terraform apply`. Nothing here has been created in AWS. Run `make tf-plan` and read it before `make tf-apply`.
