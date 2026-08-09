@@ -1,0 +1,50 @@
+# Copy to terraform.tfvars and edit. terraform.tfvars is gitignored.
+#
+#   cp terraform.tfvars.example terraform.tfvars
+
+# IAM is global; this only picks the API endpoint Terraform talks to.
+region = "us-east-1"
+
+# ---------------------------------------------------------------------------
+# Option A — static access keys (matches the walkthrough)
+# ---------------------------------------------------------------------------
+auth_method = "credentials"
+name        = "prowler-scan"
+
+# The secret lands in terraform.tfstate in plaintext. Set this to false to
+# create the user without a key and generate the key in the console instead.
+create_access_key = true
+
+# ---------------------------------------------------------------------------
+# Option B — role assumption (recommended for ongoing use)
+# ---------------------------------------------------------------------------
+# Nothing long-lived is created, so no secret reaches state or Prowler's database.
+#
+# auth_method = "role"
+# name        = "prowler-scan"
+#
+# Who may assume the role. Find your own ARN with:
+#   aws sts get-caller-identity --query Arn --output text
+# trusted_principal_arns = ["arn:aws:iam::123456789012:user/your-name"]
+#
+# Generate with: openssl rand -hex 16
+# external_id = "replace-me"
+#
+# A full scan can exceed 30 minutes; keep this above that.
+# max_session_duration = 3600
+
+# ---------------------------------------------------------------------------
+# Shared options
+# ---------------------------------------------------------------------------
+
+# Prowler's supplementary read-only permissions. Without it a handful of checks
+# report as errors rather than pass/fail.
+attach_additions_policy = true
+
+# Optional. Guarantees the scanner can never gain write access even if a broader
+# policy is attached later by mistake.
+# permissions_boundary = "arn:aws:iam::123456789012:policy/ReadOnlyBoundary"
+
+tags = {
+  Owner = "security"
+}

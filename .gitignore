@@ -1,0 +1,37 @@
+# Environment file — contains secret keys that encrypt stored cloud credentials.
+# Re-create it with: ./scripts/setup.sh
+.env
+
+# Container data (postgres, valkey, neo4j, api config) — bind-mounted by compose.
+_data/
+
+# Downloaded upstream compose file (pinned by .prowler-version)
+docker-compose.yml
+
+# Backups written by setup.sh / rotate-secrets.sh — .env.bak holds old secrets
+*.bak
+
+# Scan exports
+exports/
+*.zip
+
+# Never commit AWS credentials
+*.pem
+credentials
+.aws/
+
+# Terraform
+# State holds the IAM secret access key in PLAINTEXT when auth_method =
+# "credentials". Treat these files as credentials in their own right.
+terraform/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+# Real variable values; the .example is committed instead.
+terraform.tfvars
+*.auto.tfvars
+# .terraform.lock.hcl is deliberately NOT ignored — it pins provider versions.
+
+.DS_Store

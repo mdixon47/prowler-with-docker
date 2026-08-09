@@ -1,0 +1,121 @@
+name: Terraform plan
+
+# Runs a real `terraform plan` against AWS on PRs that touch terraform/.
+#
+# Opt-in: it no-ops unless the repository variable AWS_PLAN_ROLE_ARN is set.
+# Without that, CI still validates the config offline in ci.yml.
+#
+# Setup (one time), using OIDC so no long-lived AWS keys live in GitHub:
+#   1. Create a GitHub OIDC provider in your AWS account.
+#   2. Create a role trusting this repo, with read-only IAM permissions plus
+#      iam:Get*/iam:List* so a plan can refresh state.
+#   3. Set the repo variable AWS_PLAN_ROLE_ARN to that role's ARN.
+#
+# Deliberately plan-only. Nothing here applies: creating IAM identities is a
+# decision a human should make at a terminal, not a side effect of opening a PR.
+
+on:
+  pull_request:
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform-plan.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tf-plan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required to request the OIDC token
+      pull-requests: write # to post the plan as a comment
+    steps:
+      - name: Check whether planning is configured
+        id: gate
+        env:
+          ROLE_ARN: ${{ vars.AWS_PLAN_ROLE_ARN }}
+        run: |
+          if [[ -z "${ROLE_ARN}" ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::AWS_PLAN_ROLE_ARN is not set — skipping the live plan. See the header of this workflow to enable it."
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: steps.gate.outputs.enabled == 'true'
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          terraform_version: "1.15.0"
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials via OIDC
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          ROLE_ARN: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+        run: |
+          set -euo pipefail
+          # Exchanging the OIDC token by hand rather than adding another
+          # third-party action to the supply chain.
+          token=$(curl -sfL \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" \
+            | jq -r .value)
+
+          creds=$(aws sts assume-role-with-web-identity \
+            --role-arn "${ROLE_ARN}" \
+            --role-session-name "gh-tf-plan-${GITHUB_RUN_ID}" \
+            --web-identity-token "${token}" \
+            --duration-seconds 900 \
+            --query Credentials \
+            --output json)
+
+          {
+            echo "AWS_ACCESS_KEY_ID=$(jq -r .AccessKeyId     <<< "$creds")"
+            echo "AWS_SECRET_ACCESS_KEY=$(jq -r .SecretAccessKey <<< "$creds")"
+            echo "AWS_SESSION_TOKEN=$(jq -r .SessionToken   <<< "$creds")"
+            echo "AWS_REGION=${AWS_REGION}"
+          } >> "$GITHUB_ENV"
+
+      - name: Plan
+        if: steps.gate.outputs.enabled == 'true'
+        id: plan
+        run: |
+          set -euo pipefail
+          terraform -chdir=terraform init -backend=false
+          # No access key is created here, so no secret can reach the log or the
+          # PR comment. -no-color keeps the comment readable.
+          terraform -chdir=terraform plan \
+            -no-color -input=false -lock=false \
+            -var 'create_access_key=false' \
+            | tee /tmp/plan.txt
+
+      - name: Comment the plan on the PR
+        if: steps.gate.outputs.enabled == 'true' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Terraform plan"
+            echo
+            echo "Planned with \`create_access_key=false\`, so no secret is generated in CI."
+            echo
+            echo '```terraform'
+            # GitHub rejects comments over 65536 chars.
+            head -c 60000 /tmp/plan.txt
+            echo
+            echo '```'
+          } > /tmp/comment.md
+          gh pr comment "$PR" --body-file /tmp/comment.md

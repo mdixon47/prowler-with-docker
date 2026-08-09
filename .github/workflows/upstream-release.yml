@@ -1,0 +1,137 @@
+name: Upstream release watch
+
+# Prowler is pinned by .prowler-version. Nothing here upgrades on its own — this
+# opens a PR so the bump is reviewed, and it re-fetches the vendored IAM policy
+# in the same change (TF-2 in docs/issue.md: the policy silently drifts otherwise).
+
+on:
+  schedule:
+    # Mondays 07:00 UTC. Cron on GitHub is best-effort under load; a missed run
+    # just means the PR lands the following week.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check for a newer release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Compare pinned version to latest
+        id: compare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current=$(tr -d '[:space:]' < .prowler-version)
+          latest=$(gh api repos/prowler-cloud/prowler/releases/latest --jq .tag_name)
+
+          echo "current=${current}"
+          echo "latest=${latest}"
+          echo "current=${current}" >> "$GITHUB_OUTPUT"
+          echo "latest=${latest}"   >> "$GITHUB_OUTPUT"
+
+          if [[ "$current" == "$latest" ]]; then
+            echo "up-to-date=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Already pinned to the latest release (${current})."
+          else
+            echo "up-to-date=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open bump PR
+        if: steps.compare.outputs.up-to-date == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT: ${{ steps.compare.outputs.current }}
+          LATEST: ${{ steps.compare.outputs.latest }}
+        run: |
+          set -euo pipefail
+          branch="chore/prowler-${LATEST}"
+
+          # Don't stack duplicate PRs week after week for the same version.
+          open_prs=$(gh pr list --head "$branch" --state open --json number --jq 'length')
+          if [[ "$open_prs" -gt 0 ]]; then
+            echo "::notice::PR for ${LATEST} is already open."
+            exit 0
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+
+          # Pin the new version. setup.sh fetches docker-compose.yml and .env,
+          # but both are gitignored — only the pin and the policy are committed.
+          ./scripts/setup.sh "$LATEST"
+
+          # Re-vendor the IAM policy for the new release. Its action list grows as
+          # checks are added; without this the Terraform under-permissions them.
+          curl -sfL \
+            "https://raw.githubusercontent.com/prowler-cloud/prowler/refs/tags/${LATEST}/permissions/prowler-additions-policy.json" \
+            -o terraform/policies/prowler-additions-policy.json
+          python3 -m json.tool terraform/policies/prowler-additions-policy.json > /dev/null
+
+          git add .prowler-version terraform/policies/prowler-additions-policy.json
+
+          if git diff --cached --quiet; then
+            echo "::notice::Version tag moved but no tracked file changed; nothing to PR."
+            exit 0
+          fi
+
+          if git diff --cached --name-only | grep -q 'prowler-additions-policy.json'; then
+            policy_changed="yes — review the diff before applying"
+          else
+            policy_changed="no"
+          fi
+
+          git commit -m "chore: bump Prowler ${CURRENT} -> ${LATEST}"
+          git push --set-upstream origin "$branch"
+
+          # Body written to a file: an indented in-line heredoc would not
+          # terminate, and YAML block scalars make column-0 EOF awkward.
+          cat > /tmp/pr-body.md <<EOF
+          Automated by \`.github/workflows/upstream-release.yml\`.
+
+          | | |
+          |---|---|
+          | From | \`${CURRENT}\` |
+          | To | \`${LATEST}\` |
+          | IAM policy changed | ${policy_changed} |
+
+          [Release notes](https://github.com/prowler-cloud/prowler/releases/tag/${LATEST})
+
+          ## Before merging
+
+          - [ ] Read the upstream release notes for breaking changes.
+          - [ ] If \`.env\` gained or renamed settings, carry over your local
+          customizations — **including your rotated \`AUTH_SECRET\` and
+          \`DJANGO_SECRETS_ENCRYPTION_KEY\`**. Losing the encryption key makes stored
+          AWS credentials undecryptable (SEC-2 in \`docs/issue.md\`).
+          - [ ] Re-check that \`preflight.sh\`'s default-secret strings still match
+          what upstream ships (SEC-4) — that check fails open if they change.
+          - [ ] If the IAM policy changed, run \`make tf-plan\` before applying.
+
+          ## After merging
+
+          \`\`\`bash
+          make setup && make up
+          \`\`\`
+
+          > Note: this PR was pushed with \`GITHUB_TOKEN\`, so CI does not run on it
+          > automatically. Close and reopen it, or push an empty commit, to trigger
+          > the checks.
+          EOF
+
+          gh pr create \
+            --title "chore: bump Prowler ${CURRENT} -> ${LATEST}" \
+            --body-file /tmp/pr-body.md

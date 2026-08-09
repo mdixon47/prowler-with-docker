@@ -1,0 +1,39 @@
+version: 2
+
+updates:
+  # Actions are pinned to commit SHAs in the workflows. Dependabot understands
+  # the `# v4` comment convention and rewrites both the SHA and the comment.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(ci)"
+    labels:
+      - dependencies
+      - github-actions
+
+  # The AWS provider constraint in terraform/versions.tf. Provider upgrades can
+  # change resource behavior, so these want reading rather than auto-merging.
+  - package-ecosystem: terraform
+    directory: "/terraform"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(terraform)"
+    labels:
+      - dependencies
+      - terraform
+
+# Not covered by Dependabot, and deliberately so:
+#
+#   * The pinned Prowler release (.prowler-version) and the vendored IAM policy —
+#     handled by .github/workflows/upstream-release.yml, which bumps both together.
+#   * Container images in docker-compose.yml — that file is fetched from upstream
+#     at setup time and is gitignored, so there is nothing here to update.
+#   * The checkov version in ci.yml, which is set via an env var rather than a
+#     manifest Dependabot can parse.
