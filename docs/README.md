@@ -34,7 +34,7 @@ Pinned release: see [.prowler-version](../.prowler-version) (currently **5.38.0*
 - **Docker Desktop** with Compose v2 — `docker compose version`
 - **A personal AWS account you own or are authorized to scan.** Never scan an account you don't have permission to assess.
 - AWS console access with permission to create an IAM user and access keys
-- **~6 GB of RAM available to Docker.** The stack is eight long-running services, and neo4j alone is configured for 1 GB heap + 1 GB page cache. 4 GB works but is tight — raise the limit in Docker Desktop → Settings → Resources.
+- **~6 GB of RAM available to Docker, 8 GB if you can spare it.** Measured at **5.4 GiB idle** with all eight services up and no scan running — `worker` 2.0 GiB, `api` 1.4 GiB, `neo4j` 1.3 GiB, the rest under 350 MiB combined. A scan pushes it higher. 4 GB will not fit; raise the limit in Docker Desktop → Settings → Resources.
 - **Six free host ports:** 3000, 8000, 5432, 6379, 7687, 8080. `make preflight` checks all of them.
 - ~10 GB free disk for images and scan data
 

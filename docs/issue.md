@@ -24,9 +24,11 @@ The walkthrough at the repo root was written against an earlier Prowler release.
 
 `Claude.md` says "~4 GB of free RAM". neo4j alone is configured for 1 GB heap + 1 GB page cache (`NEO4J_SERVER_MEMORY_HEAP_MAX__SIZE`, `NEO4J_SERVER_MEMORY_PAGECACHE_SIZE`), on top of seven other services.
 
+*Measured:* **5.4 GiB resident at idle**, all eight services up, no scan running — `worker` 2.0 GiB, `api` 1.4 GiB, `neo4j` 1.3 GiB. A 4 GB allocation cannot hold this.
+
 *Impact:* on a 4 GB Docker allocation, neo4j is the first thing the OOM killer takes, and the failure surfaces confusingly as the UI never starting (see ENV-1).
 
-*Handled by:* `preflight.sh` warns below 6 GB and fails below 4 GB; [README.md](README.md) states 6 GB.
+*Handled by:* `preflight.sh` warns below 6 GB and fails below 4 GB; [README.md](README.md) states 6 GB with the measured breakdown.
 
 ### DOC-3 — `docker compose down -v` does not delete data · **open**
 
