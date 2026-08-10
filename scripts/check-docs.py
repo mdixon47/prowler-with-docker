@@ -3,7 +3,8 @@
 
 Three checks:
 
-  1. Layout   — every markdown file lives in docs/, except Claude.md at the root.
+  1. Layout   — every markdown file lives in docs/, except README.md and
+                Claude.md, which are conventionally read at the repo root.
   2. Links    — relative links point at files that exist.
   3. Anchors  — #fragments resolve to a heading in the target file.
 
@@ -23,7 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
-ROOT_ALLOWED = {"Claude.md"}
+ROOT_ALLOWED = {"Claude.md", "README.md"}
 
 # Skip anything vendored, generated, or fetched at runtime.
 SKIP_DIRS = {".git", "_data", ".terraform", "node_modules", "scratchpad"}

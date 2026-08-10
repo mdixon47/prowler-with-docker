@@ -47,7 +47,8 @@ jobs:
 
       - name: Layout, links and anchors
         # Enforces the project convention that all markdown lives in docs/
-        # except Claude.md, and that every relative link and #anchor resolves.
+        # except README.md and Claude.md, and that every relative link and
+        # #anchor resolves.
         run: python3 scripts/check-docs.py
 
   terraform:

@@ -18,7 +18,7 @@ The walkthrough at the repo root was written against an earlier Prowler release.
 
 *Impact:* users following the walkthrough expect fewer containers than `docker compose ps` shows, and may read the extras as an error.
 
-*Handled by:* the service table in [README.md](README.md).
+*Handled by:* the service table in [README.md](../README.md).
 
 ### DOC-2 — RAM requirement understated · **open**
 
@@ -28,7 +28,7 @@ The walkthrough at the repo root was written against an earlier Prowler release.
 
 *Impact:* on a 4 GB Docker allocation, neo4j is the first thing the OOM killer takes, and the failure surfaces confusingly as the UI never starting (see ENV-1).
 
-*Handled by:* `preflight.sh` warns below 6 GB and fails below 4 GB; [README.md](README.md) states 6 GB with the measured breakdown.
+*Handled by:* `preflight.sh` warns below 6 GB and fails below 4 GB; [README.md](../README.md) states 6 GB with the measured breakdown.
 
 ### DOC-3 — `docker compose down -v` does not delete data · **open**
 

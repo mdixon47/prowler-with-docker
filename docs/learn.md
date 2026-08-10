@@ -1,6 +1,6 @@
 # Learn: the concepts behind this project
 
-[README.md](README.md) tells you which commands to run. This file explains what you're actually doing and why, so the scan results mean something when they arrive.
+[README.md](../README.md) tells you which commands to run. This file explains what you're actually doing and why, so the scan results mean something when they arrive.
 
 ---
 
@@ -231,7 +231,7 @@ An `AccessDenied` is the correct result. If that succeeds, something broader tha
 
 ### Then connect it
 
-In the Prowler UI at <http://localhost:3000>: **Settings → Providers → Add Provider → Amazon Web Services**, enter `<ACCOUNT_ID>`, choose **Credentials**, paste the key ID and secret, leave the session token blank. Full walkthrough in [README.md](README.md#step-5--connect-aws-in-the-ui).
+In the Prowler UI at <http://localhost:3000>: **Settings → Providers → Add Provider → Amazon Web Services**, enter `<ACCOUNT_ID>`, choose **Credentials**, paste the key ID and secret, leave the session token blank. Full walkthrough in [README.md](../README.md#step-5--connect-aws-in-the-ui).
 
 ### Cleanup, in order
 

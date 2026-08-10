@@ -19,7 +19,7 @@ Click-ops is fine for a first run. Terraform earns its place the second time: it
 | Matches the walkthrough | Yes | No |
 | Good for | Learning, one-off scans | Anything ongoing |
 
-Start with `credentials` if you're following the walkthrough. Move to `role` once it works — that's the whole point of the "where to go next" section in [README.md](README.md).
+Start with `credentials` if you're following the walkthrough. Move to `role` once it works — that's the whole point of the "where to go next" section in [README.md](../README.md).
 
 ## Quick start
 
@@ -34,7 +34,7 @@ make tf-creds         # account ID + key ID
 make -s tf-secret     # the secret, on its own
 ```
 
-Then paste the values into the Prowler UI as described in [README.md](README.md#step-5--connect-aws-in-the-ui).
+Then paste the values into the Prowler UI as described in [README.md](../README.md#step-5--connect-aws-in-the-ui).
 
 When you're finished scanning:
 

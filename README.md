@@ -6,7 +6,7 @@ Prowler runs 500+ checks against AWS (IAM, S3, EC2, RDS, CloudTrail and more) an
 
 **Level:** beginner · **Time:** 45–60 min · **Cost:** free (scans are read-only AWS API calls)
 
-Pinned release: [.prowler-version](../.prowler-version) — currently **5.38.0**.
+Pinned release: [.prowler-version](.prowler-version) — currently **5.38.0**.
 
 ---
 
@@ -117,7 +117,7 @@ You'll land on an empty **Overview**; that's expected until a scan has run. The 
 
 ## Step 3 — Create read-only AWS credentials
 
-Two paths, both producing the same identity. Step-by-step for either is in [learn.md](learn.md#creating-prowler-scan-step-by-step).
+Two paths, both producing the same identity. Step-by-step for either is in [learn.md](docs/learn.md#creating-prowler-scan-step-by-step).
 
 **Terraform (recommended)** — six resources, one command, and one command to remove them:
 
@@ -127,9 +127,9 @@ make tf-apply
 make tf-creds
 ```
 
-**By hand** — create IAM user `prowler-scan` with no console access and attach `SecurityAudit` plus `ViewOnlyAccess`. Full detail in [aws-iam-setup.md](aws-iam-setup.md).
+**By hand** — create IAM user `prowler-scan` with no console access and attach `SecurityAudit` plus `ViewOnlyAccess`. Full detail in [aws-iam-setup.md](docs/aws-iam-setup.md).
 
-> These credentials grant read access to your entire account. Don't commit them, don't share them, and delete them when you're done. With Terraform, the secret is also written to `terraform.tfstate` in plaintext — see [the state file warning](terraform.md#the-state-file-holds-your-secret).
+> These credentials grant read access to your entire account. Don't commit them, don't share them, and delete them when you're done. With Terraform, the secret is also written to `terraform.tfstate` in plaintext — see [the state file warning](docs/terraform.md#the-state-file-holds-your-secret).
 
 ## Step 4 — Apply the mutelist
 
@@ -139,7 +139,7 @@ make mutelist
 
 Optional, but **do it before the first scan**. Mutelists apply to findings as they are produced, so applying afterwards requires a second scan to take effect.
 
-[`config/mutelist.yaml`](../config/mutelist.yaml) records findings you have looked at and deliberately accepted, each with its reasoning and the condition that should make someone revisit it. See [mutelist.md](mutelist.md).
+[`config/mutelist.yaml`](config/mutelist.yaml) records findings you have looked at and deliberately accepted, each with its reasoning and the condition that should make someone revisit it. See [mutelist.md](docs/mutelist.md).
 
 ## Step 5 — Connect AWS in the UI
 
@@ -176,7 +176,7 @@ Three views answering three different questions:
 
 **Scans** also offers a ZIP of the complete results as CSV, JSON-OCSF and HTML.
 
-A large findings count is normal. Triage order: Critical/High involving public exposure, then Critical/High involving IAM, then the rest in batches. Note that **severity describes the check, not your situation** — see [learn.md](learn.md#reading-your-first-scan-without-panicking).
+A large findings count is normal. Triage order: Critical/High involving public exposure, then Critical/High involving IAM, then the rest in batches. Note that **severity describes the check, not your situation** — see [learn.md](docs/learn.md#reading-your-first-scan-without-panicking).
 
 ## Step 8 — Clean up
 
@@ -216,12 +216,12 @@ make purge
 | `make down` | Stop, keeping all data |
 | `make purge` | Stop and delete every trace of local data |
 | `make upgrade` | Pin and fetch the newest Prowler release |
-| `make mutelist` | Upload accepted findings ([mutelist.md](mutelist.md)) |
-| `make tf-init` / `tf-plan` / `tf-apply` | Provision the IAM identity ([terraform.md](terraform.md)) |
+| `make mutelist` | Upload accepted findings ([mutelist.md](docs/mutelist.md)) |
+| `make tf-init` / `tf-plan` / `tf-apply` | Provision the IAM identity ([terraform.md](docs/terraform.md)) |
 | `make tf-creds` / `tf-secret` | Read the credentials back out |
 | `make tf-destroy` | Delete the IAM identity — the cleanup step people forget |
 | `make lint` / `docs-check` / `tf-check` | Individual checks |
-| `make ci` | Everything CI runs that works offline ([ci.md](ci.md)) |
+| `make ci` | Everything CI runs that works offline ([ci.md](docs/ci.md)) |
 
 ## Resource tuning
 
@@ -239,7 +239,7 @@ OOMKilled=true
 Process 'ForkPoolWorker-129' exited with 'signal 9 (SIGKILL)'
 ```
 
-Two tunings ship in [`docker-compose.override.yml`](../docker-compose.override.yml) and `.env`:
+Two tunings ship in [`docker-compose.override.yml`](docker-compose.override.yml) and `.env`:
 
 **1. Cap the Celery pool.** Upstream starts the worker without `--concurrency`, so Celery defaults to the CPU count — 12 forked children on a 12-core machine, each loading the full Django app, before any scan begins. The override sets `DJANGO_CELERY_WORKER_CONCURRENCY: "4"`.
 
@@ -259,7 +259,7 @@ NEO4J_SERVER_MEMORY_HEAP_MAX__SIZE=512m
 
 - **Rotate the shipped secrets before connecting AWS.** The upstream `.env` publishes a default `DJANGO_SECRETS_ENCRYPTION_KEY`, and that key encrypts your stored AWS credentials in postgres. `make secrets` replaces it. Rotating *after* a provider is saved makes the stored secret undecryptable.
 - **`.env` is gitignored** because it holds those keys. So are `*.tfstate*`, `terraform.tfvars`, `tfplan` and `_data/`.
-- **Ports bind to all interfaces**, including postgres (5432, password `postgres`) and neo4j (7687). Fine on a laptop behind a firewall; do not run this as-is on a shared or internet-reachable host. Tracked as `ENV-3` in [issue.md](issue.md).
+- **Ports bind to all interfaces**, including postgres (5432, password `postgres`) and neo4j (7687). Fine on a laptop behind a firewall; do not run this as-is on a shared or internet-reachable host. Tracked as `ENV-3` in [issue.md](docs/issue.md).
 - **Static access keys are a learning shortcut.** For anything ongoing, switch to IAM role assumption — `auth_method = "role"` in Terraform stores no long-lived secret at all.
 - **Verify the scanner is read-only** after creating it: `aws iam create-user` with its credentials should return `AccessDenied`.
 
@@ -269,18 +269,18 @@ All documentation lives in `docs/`. Only `Claude.md` sits at the repo root — a
 
 | Document | What it covers |
 | --- | --- |
-| [learn.md](learn.md) | Concepts: what Prowler is, how the stack fits together, reading a first scan, and step-by-step credential creation |
-| [aws-iam-setup.md](aws-iam-setup.md) | Creating the IAM identity by hand, and deleting it |
-| [terraform.md](terraform.md) | Provisioning the IAM identity as code, both auth methods |
-| [mutelist.md](mutelist.md) | Recording deliberately accepted findings |
-| [ci.md](ci.md) | GitHub Actions workflows and the supply-chain approach |
-| [troubleshooting.md](troubleshooting.md) | Port conflicts, unhealthy containers, stalled scans |
-| [issue.md](issue.md) | Known issues and deviations, with status |
-| [code_review.md](code_review.md) | Review of the tooling in this repo |
+| [learn.md](docs/learn.md) | Concepts: what Prowler is, how the stack fits together, reading a first scan, and step-by-step credential creation |
+| [aws-iam-setup.md](docs/aws-iam-setup.md) | Creating the IAM identity by hand, and deleting it |
+| [terraform.md](docs/terraform.md) | Provisioning the IAM identity as code, both auth methods |
+| [mutelist.md](docs/mutelist.md) | Recording deliberately accepted findings |
+| [ci.md](docs/ci.md) | GitHub Actions workflows and the supply-chain approach |
+| [troubleshooting.md](docs/troubleshooting.md) | Port conflicts, unhealthy containers, stalled scans |
+| [issue.md](docs/issue.md) | Known issues and deviations, with status |
+| [code_review.md](docs/code_review.md) | Review of the tooling in this repo |
 
 ## Troubleshooting
 
-Start with [troubleshooting.md](troubleshooting.md). The two failure modes worth knowing in advance:
+Start with [troubleshooting.md](docs/troubleshooting.md). The two failure modes worth knowing in advance:
 
 **A scan stalls partway.** Almost always the worker being OOM-killed. Check with:
 
@@ -289,9 +289,9 @@ docker inspect prowler-with-docker-worker-1 --format 'OOMKilled={{.State.OOMKill
 docker compose logs worker | grep SIGKILL
 ```
 
-**Scans pile up in a queue.** Orphan task recovery is disabled in this build, so a scan whose worker died stays `executing` forever — and since Prowler runs one scan per provider at a time, everything after it queues behind a scan that is already dead. The queue is the symptom; the crash is the cause. Clearing SQL is in [troubleshooting.md](troubleshooting.md#clearing-a-stuck-scan-and-the-scans-queued-behind-it).
+**Scans pile up in a queue.** Orphan task recovery is disabled in this build, so a scan whose worker died stays `executing` forever — and since Prowler runs one scan per provider at a time, everything after it queues behind a scan that is already dead. The queue is the symptom; the crash is the cause. Clearing SQL is in [troubleshooting.md](docs/troubleshooting.md#clearing-a-stuck-scan-and-the-scans-queued-behind-it).
 
-Anything known and still open is tracked in [issue.md](issue.md).
+Anything known and still open is tracked in [issue.md](docs/issue.md).
 
 ## Where to go next
 
