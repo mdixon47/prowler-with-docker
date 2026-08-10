@@ -131,20 +131,32 @@ muted=$(echo "$config" | jq -r '[.Mutelist.Accounts[].Checks | keys[]] | unique 
 echo "    checks to mute: ${muted}"
 
 # Same pattern as the auth call: capture body + status, report failures in words.
+#
+# -g (--globoff) is REQUIRED, not optional. JSON:API filters are bracketed
+# (filter[processor_type]=...) and curl otherwise reads [...] as a glob range,
+# refusing to build the URL at all:
+#   curl: (3) bad range in URL position 48
+# That is a client-side parse failure, so it never reaches the server — and it
+# surfaces as a bare "Error 3" from make.
 api_call() {
   local method=$1 url=$2 data=${3:-}
-  local out
+  local out rc
   if [[ -n "$data" ]]; then
-    out=$(curl -sS -X "$method" "$url" \
+    out=$(curl -sS -g -X "$method" "$url" \
       -H "Authorization: Bearer ${token}" \
       -H "Content-Type: application/vnd.api+json" \
       -H "Accept: application/vnd.api+json" \
-      -w '\n%{http_code}' --data-binary "$data" 2>/dev/null) || return 1
+      -w '\n%{http_code}' --data-binary "$data" 2>&1); rc=$?
   else
-    out=$(curl -sS -X "$method" "$url" \
+    out=$(curl -sS -g -X "$method" "$url" \
       -H "Authorization: Bearer ${token}" \
       -H "Accept: application/vnd.api+json" \
-      -w '\n%{http_code}' 2>/dev/null) || return 1
+      -w '\n%{http_code}' 2>&1); rc=$?
+  fi
+  if (( rc != 0 )); then
+    # Surface curl's own words rather than just its number.
+    CURL_ERR=$out
+    return 1
   fi
   API_CODE=${out##*$'\n'}
   API_BODY=${out%$'\n'*}
@@ -159,7 +171,8 @@ fail_api() {
 
 echo "==> Looking for an existing mutelist processor"
 api_call GET "${API}/processors?filter[processor_type]=mutelist" \
-  || { echo "error: could not reach ${API}/processors" >&2; exit 1; }
+  || { echo "error: request to ${API}/processors failed" >&2
+       echo "       ${CURL_ERR}" >&2; exit 1; }
 [[ "$API_CODE" == 200 ]] || fail_api "could not list processors"
 
 existing=$(echo "$API_BODY" | jq -r '.data[0].id // empty' 2>/dev/null || true)
@@ -170,7 +183,8 @@ if [[ -n "$existing" ]]; then
     data: { type: "processors", id: $id, attributes: { configuration: $cfg } }
   }')
   api_call PATCH "${API}/processors/${existing}" "$body" \
-    || { echo "error: PATCH request failed" >&2; exit 1; }
+    || { echo "error: PATCH request failed" >&2
+         echo "       ${CURL_ERR}" >&2; exit 1; }
   [[ "$API_CODE" == 200 ]] || fail_api "could not update the mutelist"
   echo "    updated: $(echo "$API_BODY" | jq -r '.data.id')"
 else
@@ -179,7 +193,8 @@ else
     data: { type: "processors", attributes: { processor_type: "mutelist", configuration: $cfg } }
   }')
   api_call POST "${API}/processors" "$body" \
-    || { echo "error: POST request failed" >&2; exit 1; }
+    || { echo "error: POST request failed" >&2
+         echo "       ${CURL_ERR}" >&2; exit 1; }
   [[ "$API_CODE" =~ ^20[01]$ ]] || fail_api "could not create the mutelist"
   echo "    created: $(echo "$API_BODY" | jq -r '.data.id')"
 fi

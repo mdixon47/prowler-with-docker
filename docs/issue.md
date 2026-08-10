@@ -184,6 +184,20 @@ Role mode with an empty `trusted_principal_arns` is guarded by a `lifecycle.prec
 
 ## CI
 
+### TOOL-6 — `curl` glob-parsed the JSON:API filter brackets · **fixed**
+
+`make mutelist` failed with a bare `make: *** [mutelist] Error 3`.
+
+Cause: JSON:API filters are bracketed — `?filter[processor_type]=mutelist` — and `curl` treats `[...]` as a **glob range** by default. It refused to build the URL and never contacted the server:
+
+```
+curl: (3) bad range in URL position 48
+```
+
+Two things made this hard to read. The failure is client-side, so "could not reach the API" was actively misleading — the server was healthy. And `curl -f` plus `set -e` meant the script died on curl's raw exit code before printing anything, so `make` surfaced only the number.
+
+*Fixed:* `-g` (`--globoff`) on every API call, plus error handling that prints curl's own message rather than just its status. Any future bracketed filter would have hit the same wall.
+
 ### CI-1 — Bump PRs don't trigger their own checks · **accepted**
 
 `upstream-release.yml` pushes with `GITHUB_TOKEN`, and GitHub deliberately does not trigger workflows from token-authored pushes (it prevents recursive runs). So `ci.yml` does not run on the bump PR.
