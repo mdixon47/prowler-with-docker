@@ -23,24 +23,80 @@ command -v python3 >/dev/null || { echo "error: python3 is required" >&2; exit 1
 curl -sfL -o /dev/null "${API%/api/v1}/api/v1/docs" \
   || { echo "error: Prowler API not reachable at ${API} — is the stack up? (make up)" >&2; exit 1; }
 
+if [[ ! -t 0 && -z "${PROWLER_PASSWORD:-}" ]]; then
+  echo "error: this script prompts for a password, so it needs a terminal." >&2
+  echo "       Run it directly (make mutelist), not through a pipe or from a" >&2
+  echo "       CI job. For automation, set PROWLER_EMAIL and PROWLER_PASSWORD." >&2
+  exit 1
+fi
+
 email="${PROWLER_EMAIL:-}"
 if [[ -z "$email" ]]; then
-  read -r -p "Prowler email: " email
+  read -r -p "Prowler email: " email || {
+    echo "error: no email given" >&2; exit 1; }
 fi
+[[ -n "$email" ]] || { echo "error: email cannot be empty" >&2; exit 1; }
+
 # -s: no echo. The password never reaches the process list or the shell history.
-read -r -s -p "Prowler password: " password
-echo
+password="${PROWLER_PASSWORD:-}"
+if [[ -z "$password" ]]; then
+  read -r -s -p "Prowler password: " password || {
+    echo >&2; echo "error: no password given" >&2; exit 1; }
+  echo
+fi
+[[ -n "$password" ]] || { echo "error: password cannot be empty" >&2; exit 1; }
 
 echo "==> Authenticating"
-token=$(jq -n --arg e "$email" --arg p "$password" '{
+
+# Deliberately NOT `curl -f`: with -f the body is discarded and the script dies
+# on curl's raw exit code (22) before it can explain anything. Capture the body
+# and the status separately so every failure gets a readable message.
+auth_body=$(jq -n --arg e "$email" --arg p "$password" '{
   data: { type: "tokens", attributes: { email: $e, password: $p } }
-}' | curl -sfL -X POST "${API}/tokens" \
+}' | curl -sS -X POST "${API}/tokens" \
       -H "Content-Type: application/vnd.api+json" \
       -H "Accept: application/vnd.api+json" \
-      --data-binary @- | jq -r '.data.attributes.access // empty')
+      -w '\n%{http_code}' \
+      --data-binary @- 2>/dev/null) || {
+  echo "error: could not reach ${API}/tokens" >&2
+  exit 1
+}
 
 unset password
-[[ -n "$token" ]] || { echo "error: authentication failed — check the email and password" >&2; exit 1; }
+
+auth_code=${auth_body##*$'\n'}
+auth_json=${auth_body%$'\n'*}
+
+case "$auth_code" in
+  200|201)
+    ;;
+  400|401)
+    echo "error: authentication failed (HTTP ${auth_code})." >&2
+    echo "       That email/password is not a valid Prowler login. This is the" >&2
+    echo "       local account created at http://localhost:3000 — not your AWS" >&2
+    echo "       credentials, and not your GitHub login." >&2
+    detail=$(echo "$auth_json" | jq -r '.errors[0].detail // empty' 2>/dev/null || true)
+    [[ -n "$detail" ]] && echo "       server said: ${detail}" >&2
+    exit 1
+    ;;
+  429)
+    echo "error: rate limited (HTTP 429). The API throttles token requests;" >&2
+    echo "       wait a minute and try again." >&2
+    exit 1
+    ;;
+  *)
+    echo "error: unexpected response from ${API}/tokens (HTTP ${auth_code})" >&2
+    echo "$auth_json" | head -c 400 >&2; echo >&2
+    exit 1
+    ;;
+esac
+
+token=$(echo "$auth_json" | jq -r '.data.attributes.access // empty' 2>/dev/null || true)
+if [[ -z "$token" ]]; then
+  echo "error: authenticated but no access token in the response." >&2
+  echo "$auth_json" | head -c 400 >&2; echo >&2
+  exit 1
+fi
 
 # YAML -> JSON, so the file stays comment-friendly for humans (the reasoning
 # for each muted check lives in comments and in Description) while the API
@@ -74,31 +130,58 @@ echo "$config" | jq -e '.Mutelist.Accounts' >/dev/null \
 muted=$(echo "$config" | jq -r '[.Mutelist.Accounts[].Checks | keys[]] | unique | join(", ")')
 echo "    checks to mute: ${muted}"
 
+# Same pattern as the auth call: capture body + status, report failures in words.
+api_call() {
+  local method=$1 url=$2 data=${3:-}
+  local out
+  if [[ -n "$data" ]]; then
+    out=$(curl -sS -X "$method" "$url" \
+      -H "Authorization: Bearer ${token}" \
+      -H "Content-Type: application/vnd.api+json" \
+      -H "Accept: application/vnd.api+json" \
+      -w '\n%{http_code}' --data-binary "$data" 2>/dev/null) || return 1
+  else
+    out=$(curl -sS -X "$method" "$url" \
+      -H "Authorization: Bearer ${token}" \
+      -H "Accept: application/vnd.api+json" \
+      -w '\n%{http_code}' 2>/dev/null) || return 1
+  fi
+  API_CODE=${out##*$'\n'}
+  API_BODY=${out%$'\n'*}
+}
+
+fail_api() {
+  echo "error: $1 (HTTP ${API_CODE})" >&2
+  echo "$API_BODY" | jq -r '.errors[]? | "       " + (.detail // .title // "")' 2>/dev/null \
+    || echo "$API_BODY" | head -c 400 >&2
+  exit 1
+}
+
 echo "==> Looking for an existing mutelist processor"
-existing=$(curl -sfL "${API}/processors?filter[processor_type]=mutelist" \
-  -H "Authorization: Bearer ${token}" \
-  -H "Accept: application/vnd.api+json" | jq -r '.data[0].id // empty')
+api_call GET "${API}/processors?filter[processor_type]=mutelist" \
+  || { echo "error: could not reach ${API}/processors" >&2; exit 1; }
+[[ "$API_CODE" == 200 ]] || fail_api "could not list processors"
+
+existing=$(echo "$API_BODY" | jq -r '.data[0].id // empty' 2>/dev/null || true)
 
 if [[ -n "$existing" ]]; then
   echo "    updating processor ${existing}"
   body=$(jq -n --arg id "$existing" --argjson cfg "$config" '{
     data: { type: "processors", id: $id, attributes: { configuration: $cfg } }
   }')
-  curl -sfL -X PATCH "${API}/processors/${existing}" \
-    -H "Authorization: Bearer ${token}" \
-    -H "Content-Type: application/vnd.api+json" \
-    -H "Accept: application/vnd.api+json" \
-    --data-binary "$body" | jq -r '"    updated: " + .data.id'
+  api_call PATCH "${API}/processors/${existing}" "$body" \
+    || { echo "error: PATCH request failed" >&2; exit 1; }
+  [[ "$API_CODE" == 200 ]] || fail_api "could not update the mutelist"
+  echo "    updated: $(echo "$API_BODY" | jq -r '.data.id')"
 else
   echo "    creating a new mutelist processor"
   body=$(jq -n --argjson cfg "$config" '{
     data: { type: "processors", attributes: { processor_type: "mutelist", configuration: $cfg } }
   }')
-  curl -sfL -X POST "${API}/processors" \
-    -H "Authorization: Bearer ${token}" \
-    -H "Content-Type: application/vnd.api+json" \
-    -H "Accept: application/vnd.api+json" \
-    --data-binary "$body" | jq -r '"    created: " + .data.id'
+  api_call POST "${API}/processors" "$body" \
+    || { echo "error: POST request failed" >&2; exit 1; }
+  [[ "$API_CODE" =~ ^20[01]$ ]] || fail_api "could not create the mutelist"
+  echo "    created: $(echo "$API_BODY" | jq -r '.data.id')"
 fi
 
 echo
