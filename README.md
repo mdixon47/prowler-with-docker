@@ -1,5 +1,7 @@
 # Deploy Prowler with Docker Compose and scan your AWS account
 
+This walkthrough should introduce learners to cloud security assessment in a practical and approachable way.
+
 Run [Prowler](https://prowler.com) — an open source cloud security platform — on your own machine, connect it to an AWS account with read-only credentials, and scan that account from a web UI.
 
 Prowler runs 500+ checks against AWS (IAM, S3, EC2, RDS, CloudTrail and more) and maps the results to CIS, NIST, PCI-DSS, HIPAA and SOC 2.
