@@ -23,11 +23,12 @@ Prowler runs 500+ checks against AWS (IAM, S3, EC2, RDS, CloudTrail, and more) a
 | `make upgrade` | Pin and fetch the newest Prowler release |
 | `make tf-apply` | Create the AWS-side IAM identity with Terraform ([terraform.md](terraform.md)) |
 | `make tf-destroy` | Delete it again — the cleanup step people forget |
+| `make mutelist` | Upload accepted-findings list to Prowler ([mutelist.md](mutelist.md)) |
 | `make ci` | Run every check CI runs that works offline ([ci.md](ci.md)) |
 
 Pinned release: see [.prowler-version](../.prowler-version) (currently **5.38.0**).
 
-> All project documentation lives in this `docs/` folder — [learn.md](learn.md) for the concepts behind the tool, [terraform.md](terraform.md) for the AWS-side provisioning, [ci.md](ci.md) for the GitHub Actions workflows, [issue.md](issue.md) for the known-issues log, [code_review.md](code_review.md) for a review of the tooling here. Only `Claude.md` stays at the repo root — a rule CI enforces.
+> All project documentation lives in this `docs/` folder — [learn.md](learn.md) for the concepts behind the tool, [terraform.md](terraform.md) for the AWS-side provisioning, [ci.md](ci.md) for the GitHub Actions workflows, [mutelist.md](mutelist.md) for accepted findings, [issue.md](issue.md) for the known-issues log, [code_review.md](code_review.md) for a review of the tooling here. Only `Claude.md` stays at the repo root — a rule CI enforces.
 
 ## Prerequisites
 

@@ -7,7 +7,7 @@ TF := terraform -chdir=terraform
 
 .PHONY: help setup preflight secrets up down logs ps status open purge upgrade \
         tf-init tf-plan tf-apply tf-creds tf-secret tf-destroy tf-check \
-        docs-check lint ci
+        docs-check lint ci mutelist
 
 help: ## Show this help
 	@echo "Prowler local server — pinned to $(VERSION)"
@@ -88,6 +88,9 @@ tf-check: ## Validate and format-check the terraform config
 	$(TF) validate
 
 # --- Checks that mirror CI ------------------------------------------------
+
+mutelist: ## Upload config/mutelist.yaml to the running Prowler server
+	@./scripts/apply-mutelist.sh
 
 docs-check: ## Check markdown layout, links and anchors
 	@python3 scripts/check-docs.py

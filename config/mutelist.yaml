@@ -1,0 +1,37 @@
+# Prowler mutelist — accepted findings, with the reason each one was accepted.
+#
+# Muting is not ignoring. Every entry here is a decision that the finding is
+# understood and accepted for this account, and each carries the reasoning and
+# the condition that should make someone revisit it.
+#
+# Apply with: ./scripts/apply-mutelist.sh   (see docs/mutelist.md)
+#
+# Schema note: the server accepts Regions, Resources, Tags, Exceptions and
+# Description per check. Regions/Resources are required and are regex patterns;
+# "*" matches everything.
+
+Mutelist:
+  Accounts:
+    # "*" applies to every connected AWS account. Narrow this to a specific
+    # 12-digit account ID once more than one provider is connected.
+    "*":
+      Checks:
+        securityhub_enabled:
+          Regions:
+            - "*"
+          Resources:
+            - "*"
+          Description: >-
+            ACCEPTED 2026-08-09. AWS Security Hub is not enabled in any region.
+            Verified at acceptance time: 0 Config recorders, 0 EC2 instances,
+            0 S3 buckets, 2 IAM users — the account holds no workloads, so the
+            continuous-monitoring capability this check measures protects
+            nothing yet. Prowler already provides the assessment coverage;
+            Security Hub adds aggregation and continuous control evaluation,
+            which requires AWS Config and bills per recorded configuration item
+            and per check, in every region enabled. Enabling it account-wide now
+            would pay in every region to monitor an empty account.
+            REVISIT WHEN: any real workload is deployed, a second AWS account is
+            added, or GuardDuty/Inspector/Macie are enabled and their findings
+            need aggregating. At that point enable Security Hub plus AWS Config
+            in the primary region first, with the AWS FSBP standard.
