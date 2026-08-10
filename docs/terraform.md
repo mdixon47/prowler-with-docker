@@ -34,7 +34,7 @@ make tf-creds         # account ID + key ID
 make -s tf-secret     # the secret, on its own
 ```
 
-Then paste the values into the Prowler UI as described in [README.md](README.md#step-4--connect-aws-in-the-ui).
+Then paste the values into the Prowler UI as described in [README.md](README.md#step-5--connect-aws-in-the-ui).
 
 When you're finished scanning:
 
