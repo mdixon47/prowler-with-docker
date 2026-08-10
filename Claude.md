@@ -28,6 +28,8 @@ Cloud accounts drift. A test bucket gets made public, an IAM user keeps keys tha
 
 ## How You Can Use Prowler
 
+> **Objective:** this walkthrough should introduce learners to cloud security assessment in a practical and approachable way.
+
 Prowler is useful in three overlapping ways:
 
 1. **Security reviews** — get a point-in-time picture of your account's security posture, with findings ranked by severity.
