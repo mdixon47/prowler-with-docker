@@ -1,6 +1,6 @@
 # Deploy Prowler with Docker Compose and scan your AWS account
 
-This walkthrough should introduce learners to cloud security assessment in a practical and approachable way.
+A practical, approachable introduction to cloud security assessment. You'll go from an empty Docker host to a scanned AWS account, a compliance report, and a concrete list of misconfigurations to fix.
 
 Run [Prowler](https://prowler.com) — an open source cloud security platform — on your own machine, connect it to an AWS account with read-only credentials, and scan that account from a web UI.
 
