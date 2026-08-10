@@ -65,13 +65,90 @@ In order of likelihood:
 
 ## A scan starts but never finishes
 
-A full account scan legitimately takes 10–30 minutes, longer in accounts with many resources across many regions.
+A full account scan legitimately takes 10–30 minutes, longer in accounts with many resources across many regions. Genuinely stuck is different, and has a specific signature.
 
-If it's genuinely stuck:
+### First: is it stalled, or just slow?
 
 ```bash
-make logs S=worker
+docker compose exec -T postgres psql -U prowler_admin -d prowler_db -c \
+  "select state, progress, (now()-started_at)::interval(0) as running_for,
+          (now()-updated_at)::interval(0) as since_last_update
+     from scans where state='executing';"
 ```
+
+If `since_last_update` is more than a few minutes, it is stalled, not slow.
+
+### The most likely cause: the worker was OOM-killed
+
+Confirmed on this setup — a scan died at 95% with 630 findings already written:
+
+```bash
+docker inspect prowler-with-docker-worker-1 --format 'OOMKilled={{.State.OOMKilled}}'
+docker compose logs worker | grep -E "SIGKILL|exited with"
+```
+
+```
+OOMKilled=true
+ERROR/MainProcess] Process 'ForkPoolWorker-129' pid:2162 exited with 'signal 9 (SIGKILL)'
+```
+
+Two things conspire here:
+
+1. **Celery defaults its pool size to the CPU count.** On a 12-core machine that is 12 forked children, each loading the full Django app, before a single scan starts. The scanning child then grows into whatever is left.
+2. **Orphan task recovery is disabled** in this build — the worker logs `Orphan task recovery disabled by feature flag` every two minutes. So when the task dies, the scan row stays `executing` forever, and because Prowler runs one scan per provider at a time, **every later scan queues behind a scan that is already dead**.
+
+The symptom people notice is the queue, not the crash.
+
+### Fix
+
+**1. Cap the Celery pool.** [`docker-compose.override.yml`](../docker-compose.override.yml) sets `DJANGO_CELERY_WORKER_CONCURRENCY: "4"`. That exact variable is read by Prowler's `config/settings/celery.py`; verify it applied with:
+
+```bash
+docker compose logs worker | grep concurrency     # => concurrency: 4 (prefork)
+```
+
+**2. Trim neo4j** in `.env` — attack-path graphs are unused on a small account, and the JVM reserves heap and page cache up front. `.env` is gitignored, so these values are recorded here rather than in the repo:
+
+```env
+NEO4J_SERVER_MEMORY_PAGECACHE_SIZE=512m
+NEO4J_SERVER_MEMORY_HEAP_INITIAL__SIZE=512m
+NEO4J_SERVER_MEMORY_HEAP_MAX__SIZE=512m
+```
+
+Together these took idle usage from **5.4 GiB to ~3.9 GiB**.
+
+**3. Raise Docker Desktop's memory** — Settings → Resources → Memory. This is the actual fix; the rest is headroom. 12–16 GiB is sensible on a 32 GB machine.
+
+> Do **not** add a `mem_limit` to the `worker` service to "contain" it. Capping the container makes the OOM arrive sooner — the scanning child needs room to finish.
+
+### Clearing a stuck scan and the scans queued behind it
+
+Nothing will clear these on its own while orphan recovery is disabled. Back up first:
+
+```bash
+docker compose exec -T postgres psql -U prowler_admin -d prowler_db -c \
+  "\copy (select * from scans) to stdout with csv header" > scans-backup.csv
+```
+
+Then mark the dead scan failed and cancel the phantom queue:
+
+```sql
+BEGIN;
+UPDATE scans SET state='failed', completed_at=updated_at,
+       duration=GREATEST(0, EXTRACT(EPOCH FROM (updated_at - started_at))::int)
+ WHERE state='executing';
+UPDATE scans SET state='cancelled', completed_at=now()
+ WHERE state='available';
+COMMIT;
+```
+
+Cancel rather than delete — findings already written stay browsable, and the history shows what happened. Check the queues really are empty first, so nothing resurrects:
+
+```bash
+docker compose exec -T valkey valkey-cli llen scans     # expect 0
+```
+
+### Other causes
 
 - **Throttling** (`Rate exceeded`) — Prowler backs off and retries; slow is normal, not stuck.
 - **`AccessDenied` on specific checks** — expected for checks needing the optional additions policy. Those report as errors; the rest of the scan continues.

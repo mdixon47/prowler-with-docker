@@ -64,7 +64,34 @@ Compose publishes ports without a `127.0.0.1:` prefix, so postgres (password `po
 
 *Impact:* fine on a laptop behind a firewall; not fine on a shared box, a VPS, or a café network.
 
-*Mitigation for now:* documented in README's security notes. A real fix means overriding the port bindings, which upgrades would overwrite — a `docker-compose.override.yml` is the natural home for it but isn't written yet.
+*Mitigation for now:* documented in README's security notes. The real fix is to bind these ports to `127.0.0.1` — and [`docker-compose.override.yml`](../docker-compose.override.yml) now exists (created for ENV-5), so there is a home for it that upgrades will not overwrite. Not yet done.
+
+### ENV-5 — Celery pool defaults to CPU count; scan OOM-killed · **fixed (mitigated)**
+
+Observed 2026-08-10: a scan died at 95% with 630 findings already written.
+
+```
+OOMKilled=true
+ERROR/MainProcess] Process 'ForkPoolWorker-129' pid:2162 exited with 'signal 9 (SIGKILL)'
+```
+
+Upstream starts the worker without `--concurrency`, so Celery uses the CPU count — 12 forked children on this machine, each loading the full Django app, before any scan begins. The scanning child then grows into what little remains of a 7.65 GiB allocation.
+
+*Fixed by:* [`docker-compose.override.yml`](../docker-compose.override.yml) setting `DJANGO_CELERY_WORKER_CONCURRENCY: "4"` (verified in the worker banner: `concurrency: 4 (prefork)`), plus trimming neo4j heap/page cache to 512m in `.env`. Idle usage fell from **5.4 GiB to ~3.9 GiB**.
+
+*Still open in spirit:* the real fix is a larger Docker memory allocation. The mitigation buys headroom; it does not make the stack fit in 8 GiB under all conditions.
+
+*Note:* a `mem_limit` on the worker was considered and rejected — capping the container makes the OOM arrive sooner, since the scanning child needs room to finish.
+
+### ENV-6 — Orphan task recovery is disabled, so dead scans block the queue · **open**
+
+The worker logs `Orphan task recovery disabled by feature flag` every two minutes. When a scan's task dies, the `scans` row stays `executing` indefinitely — the Celery result says `FAILURE` while the scan says `executing`.
+
+Because Prowler runs one scan per provider at a time, **every subsequent scan queues behind the dead one and never starts**. The user-visible symptom is a growing queue, which points away from the actual crash.
+
+*Impact:* worse than the crash it follows. A single OOM silently ends all scanning until someone intervenes.
+
+*Workaround:* the SQL in [troubleshooting.md](troubleshooting.md#clearing-a-stuck-scan-and-the-scans-queued-behind-it) marks the orphan failed and cancels the phantom queue. No upstream flag to re-enable it was found in `.env`.
 
 ### ENV-4 — Changing postgres credentials after first start has no effect · **accepted (postgres behavior)**
 
