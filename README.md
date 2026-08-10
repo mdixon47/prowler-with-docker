@@ -1,4 +1,4 @@
-# Prowler Local Server with Docker Compose
+# Deploy Prowler with Docker Compose and scan your AWS account
 
 Run [Prowler](https://prowler.com) — an open source cloud security platform — on your own machine, connect it to an AWS account with read-only credentials, and scan that account from a web UI.
 
@@ -71,7 +71,8 @@ make -s tf-secret # the secret, on its own
 ## Repository layout
 
 ```
-Claude.md                    the original walkthrough (only markdown outside docs/)
+README.md                    this file — the walkthrough
+Claude.md                    the original walkthrough
 Makefile                     every command below
 docker-compose.yml           fetched from upstream, gitignored
 docker-compose.override.yml  local tuning that survives upgrades
@@ -265,7 +266,7 @@ NEO4J_SERVER_MEMORY_HEAP_MAX__SIZE=512m
 
 ## Documentation map
 
-All documentation lives in `docs/`. Only `Claude.md` sits at the repo root — a rule CI enforces.
+All documentation lives in `docs/`. Only this README and `Claude.md` sit at the repo root — a rule CI enforces.
 
 | Document | What it covers |
 | --- | --- |
